@@ -136,10 +136,12 @@ class TaskService:
         ingestion_timeout=3600,
         docling_service=None,
         docling_polling_service=None,
+        session_manager=None,
     ):
         self.document_service = document_service
         self.models_service = models_service
         self.docling_service = docling_service
+        self.session_manager = session_manager
         # Backend-side Docling polling coordinator. Injected by the container
         # so LangflowFileProcessor receives it from the established DI chain
         # rather than constructing it inline. None disables the two-phase
@@ -226,6 +228,9 @@ class TaskService:
         jwt_token: str = None,
         owner_name: str = None,
         owner_email: str = None,
+        original_filenames: dict | None = None,
+        replace_duplicates: bool = False,
+        settings: dict | None = None,
     ) -> str:
         """Create a new upload task for bulk file processing"""
         # Use default DocumentFileProcessor with user context
@@ -239,8 +244,17 @@ class TaskService:
             owner_name=owner_name,
             owner_email=owner_email,
             docling_service=self.docling_service,
+            replace_duplicates=replace_duplicates,
+            session_manager=self.session_manager,
+            settings=settings,
         )
-        return await self.create_custom_task(user_id, file_paths, processor)
+        return await self.create_custom_task(
+            user_id,
+            file_paths,
+            processor,
+            original_filenames=original_filenames,
+            temp_file_paths=file_paths,
+        )
 
     async def create_langflow_upload_task(
         self,
@@ -258,6 +272,7 @@ class TaskService:
         replace_duplicates: bool = False,
         connector_type: str = "local",
         existing_task_id: str = None,
+        temp_file_paths: list | None = None,
     ) -> str:
         """Create a new upload task for Langflow file processing with upload and ingest"""
         # Use LangflowFileProcessor with user context
@@ -278,7 +293,12 @@ class TaskService:
             docling_polling_service=self.docling_polling_service,
         )
         return await self.create_custom_task(
-            user_id, file_paths, processor, original_filenames, existing_task_id=existing_task_id
+            user_id,
+            file_paths,
+            processor,
+            original_filenames,
+            existing_task_id=existing_task_id,
+            temp_file_paths=temp_file_paths if temp_file_paths is not None else file_paths,
         )
 
     async def create_langflow_url_upload_task(
@@ -323,6 +343,7 @@ class TaskService:
         processor,
         original_filenames: dict | None = None,
         existing_task_id: str = None,
+        temp_file_paths: list | None = None,
     ) -> str:
         """Create a new task with custom processor for any type of items"""
         import os
@@ -362,6 +383,12 @@ class TaskService:
             if store_user_id not in self.task_store:
                 self.task_store[store_user_id] = {}
             self.task_store[store_user_id][task_id] = upload_task
+
+        # Store temp file paths for cleanup after processing
+        if temp_file_paths:
+            if upload_task.temp_file_paths is None:
+                upload_task.temp_file_paths = []
+            upload_task.temp_file_paths.extend(temp_file_paths)
 
         # Start background processing
         background_task = asyncio.create_task(
@@ -566,6 +593,21 @@ class TaskService:
 
                 upload_task.status = TaskStatus.COMPLETED
                 upload_task.updated_at = time.time()
+
+            # Clean up temp files after all processing is complete
+            if hasattr(upload_task, "temp_file_paths") and upload_task.temp_file_paths:
+                from utils.file_utils import safe_unlink
+
+                for temp_path in upload_task.temp_file_paths:
+                    try:
+                        safe_unlink(temp_path)
+                        logger.debug("Cleaned up temp file", temp_path=temp_path)
+                    except Exception as cleanup_error:
+                        logger.warning(
+                            "Failed to clean up temp file after processing",
+                            temp_path=temp_path,
+                            error=str(cleanup_error),
+                        )
 
             status: str = "FAILED"
 
