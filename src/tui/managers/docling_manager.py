@@ -10,6 +10,13 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
+from config.docling_versions import (
+    DOCLING_SERVE_VERSION,
+    DOCLING_CORE_VERSION,
+    DOCLING_TRANSFORMERS_SPEC,
+    DOCLING_EXTRAS_MACOS,
+    DOCLING_EXTRAS_LINUX,
+)
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -21,12 +28,12 @@ class DoclingManager:
     _instance = None
     _initialized = False
 
-    def __new__(cls) -> Any:
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self) -> None:
+    def __init__(self):
         # Only initialize once
         if self._initialized:
             return
@@ -58,7 +65,7 @@ class DoclingManager:
         # Try to recover existing process from PID file
         self._recover_from_pid_file()
 
-    def cleanup(self) -> None:
+    def cleanup(self):
         """Cleanup resources but keep docling-serve running across sessions."""
         # Don't stop the process on exit - let it persist
         # Just clean up our references
@@ -288,27 +295,23 @@ class DoclingManager:
 
         try:
             docling_extras = (
-                "ocrmac,easyocr,rapidocr,vlm"
-                if sys.platform == "darwin"
-                else "easyocr,rapidocr,vlm"
+                DOCLING_EXTRAS_MACOS if sys.platform == "darwin" else DOCLING_EXTRAS_LINUX
             )
 
             cmd = [
                 "uvx",
-                "--python",
-                "3.13",
                 "--from",
-                "docling-serve[ui]==1.26.0",
+                f"docling-serve[ui]=={DOCLING_SERVE_VERSION}",
                 "--with",
                 "onnxruntime",
                 "--with",
                 "easyocr",
                 "--with",
-                f"docling[{docling_extras}]==2.108.0",
+                f"docling[{docling_extras}]",
                 "--with",
-                "docling-core==2.85.0",
+                f"docling-core=={DOCLING_CORE_VERSION}",
                 "--with",
-                "transformers>=5.8.1,<5.9.0",
+                f"transformers{DOCLING_TRANSFORMERS_SPEC}",
             ]
             if override_path:
                 cmd += ["--override", override_path, "--with", "opencv-python-headless"]
@@ -335,20 +338,11 @@ class DoclingManager:
             # async task state (leading to 404 on /v1/result/{id}).
             self._log_file_path.parent.mkdir(parents=True, exist_ok=True)
             log_file = open(self._log_file_path, "w")
-
-            env = os.environ.copy()
-
-            # Add docling serve environment variable to change Tenant Id header name
-            # so that it's not used to enforce ownership locally.
-            if "DOCLING_SERVE_ENG_RAY_TENANT_ID_HEADER" not in env:
-                env["DOCLING_SERVE_ENG_RAY_TENANT_ID_HEADER"] = "X-Docling-Tenant-Id"
-
             self._process = subprocess.Popen(
                 cmd,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,  # Merge stderr into stdout log file
                 start_new_session=True,  # Detach from parent process group
-                env=env,
             )
             # Close parent's copy of the fd; the child has its own
             log_file.close()
@@ -453,10 +447,10 @@ class DoclingManager:
                     pass
             return False, f"Error starting docling serve: {str(e)}"
 
-    def _start_output_capture(self) -> None:
-        """Start a thread to capture log file output."""
+    def _start_output_capture(self):
+        """Start a thread to tail the docling-serve log file."""
 
-        def tail_log_file() -> None:
+        def tail_log_file():
             if not self._log_file_path.exists():
                 self._add_log_entry("No log file available")
                 return
