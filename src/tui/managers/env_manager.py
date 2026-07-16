@@ -831,9 +831,63 @@ class EnvManager:
 
         return base_fields + oauth_fields + flow_fields + optional_fields
 
+    def ensure_image_config(self) -> None:
+        """Write IMAGE_REGISTRY, IMAGE_ORG and OPENSEARCH_DASHBOARDS_IMAGE to the
+        .env file if they are not already present.
+
+        Values come from ``config.image_config`` which auto-detects the host
+        architecture, so on ppc64le the Artifactory registry is used by default
+        without any manual configuration.
+        """
+        try:
+            from config.image_config import (
+                IMAGE_REGISTRY,
+                IMAGE_ORG,
+                OPENSEARCH_DASHBOARDS_IMAGE,
+            )
+
+            vars_to_ensure = {
+                "IMAGE_REGISTRY": IMAGE_REGISTRY,
+                "IMAGE_ORG": IMAGE_ORG,
+                "OPENSEARCH_DASHBOARDS_IMAGE": OPENSEARCH_DASHBOARDS_IMAGE,
+            }
+
+            if self.env_file.exists():
+                lines = self.env_file.read_text().splitlines()
+            else:
+                lines = []
+
+            existing_keys = {
+                line.split("=", 1)[0].strip()
+                for line in lines
+                if "=" in line and not line.strip().startswith("#")
+            }
+
+            added = []
+            for key, value in vars_to_ensure.items():
+                if key not in existing_keys:
+                    lines.append(f"{key}={self._quote_env_value(value)}")
+                    added.append(key)
+
+            if added:
+                self.env_file.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(self.env_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                os.chmod(self.env_file, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write("\n".join(lines) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                logger.debug(f"Wrote image config to .env: {added}")
+
+        except Exception as e:
+            logger.error(f"Error ensuring image config in .env: {e}")
+
     def ensure_openrag_version(self) -> None:
         """Ensure OPENRAG_VERSION is set in .env file to match TUI version."""
         try:
+            # Always ensure image registry config is written first
+            self.ensure_image_config()
+
             from ..utils.version_check import get_current_version
 
             current_version = get_current_version()
