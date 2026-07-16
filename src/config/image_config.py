@@ -1,29 +1,73 @@
 """Image configuration for OpenRAG container images."""
 
 import os
+import platform
+
+# ---------------------------------------------------------------------------
+# Architecture detection
+# ---------------------------------------------------------------------------
+
+def _detect_arch() -> str:
+    """Return the normalised architecture string for the current machine.
+
+    Maps ``platform.machine()`` values to the identifiers used in image tags:
+    - ``x86_64``  -> ``""``   (no suffix — Docker Hub fat manifests cover amd64)
+    - ``aarch64`` -> ``""``   (no suffix — Docker Hub fat manifests cover arm64)
+    - ``ppc64le`` -> ``"ppc64le"``
+    """
+    machine = platform.machine().lower()
+    if machine == "ppc64le":
+        return "ppc64le"
+    return ""
+
+#: Recognised architecture identifiers.
+SUPPORTED_ARCHITECTURES: tuple[str, ...] = ("amd64", "arm64", "ppc64le")
+
+#: Target architecture suffix.  Set IMAGE_ARCH to override auto-detection.
+#: Leave empty for a fat-manifest / architecture-agnostic reference.
+IMAGE_ARCH: str = os.getenv("IMAGE_ARCH", _detect_arch())
 
 # ---------------------------------------------------------------------------
 # Registry & organisation
 # ---------------------------------------------------------------------------
 
+# Per-architecture registry and org defaults.
+_ARCH_REGISTRY_DEFAULTS: dict[str, tuple[str, str]] = {
+    "ppc64le": (
+        "docker-na-public.artifactory.swg-devops.com",
+        "hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/power/langflowai",
+    ),
+}
+
+_default_registry, _default_org = _ARCH_REGISTRY_DEFAULTS.get(
+    IMAGE_ARCH, ("docker.io", "langflowai")
+)
+
 #: Container registry host.  Override via IMAGE_REGISTRY env var.
-#: Default matches the current Docker Hub images.
-IMAGE_REGISTRY: str = os.getenv("IMAGE_REGISTRY", "docker.io")
+IMAGE_REGISTRY: str = os.getenv("IMAGE_REGISTRY", _default_registry)
 
 #: Organisation / namespace within the registry.  Override via IMAGE_ORG.
-IMAGE_ORG: str = os.getenv("IMAGE_ORG", "langflowai")
+IMAGE_ORG: str = os.getenv("IMAGE_ORG", _default_org)
 
 # ---------------------------------------------------------------------------
-# Architecture
+# Third-party image overrides
 # ---------------------------------------------------------------------------
 
-#: Target architecture suffix.  Set IMAGE_ARCH to one of: amd64, arm64,
-#: ppc64le.  Leave empty (default) for a fat-manifest / architecture-agnostic
-#: reference (i.e. no suffix appended to the tag).
-IMAGE_ARCH: str = os.getenv("IMAGE_ARCH", "")
+# On ppc64le the opensearch-dashboards image lives in the same Artifactory
+# namespace under a different path.  The compose file exposes
+# OPENSEARCH_DASHBOARDS_IMAGE so this can be overridden without code changes.
+_DASHBOARDS_DEFAULTS: dict[str, str] = {
+    "ppc64le": (
+        "docker-na-public.artifactory.swg-devops.com/"
+        "hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/power/"
+        "opensearch-dashboards/cnos-dashboards:3.6.0-052726"
+    ),
+}
 
-#: Recognised architecture identifiers.
-SUPPORTED_ARCHITECTURES: tuple[str, ...] = ("amd64", "arm64", "ppc64le")
+OPENSEARCH_DASHBOARDS_IMAGE: str = os.getenv(
+    "OPENSEARCH_DASHBOARDS_IMAGE",
+    _DASHBOARDS_DEFAULTS.get(IMAGE_ARCH, "docker.io/opensearchproject/opensearch-dashboards:3.0.0"),
+)
 
 # ---------------------------------------------------------------------------
 # Image names

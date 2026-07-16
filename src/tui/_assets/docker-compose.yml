@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
 
   dashboards:
-    image: ${IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch-dashboards:3.0.0
+    image: ${OPENSEARCH_DASHBOARDS_IMAGE:-${IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch-dashboards:3.0.0}
     container_name: osdash
     depends_on:
       - opensearch
