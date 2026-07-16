@@ -31,17 +31,24 @@ IMAGE_ARCH: str = os.getenv("IMAGE_ARCH", _detect_arch())
 # Registry & organisation
 # ---------------------------------------------------------------------------
 
-# Per-architecture registry and org defaults.
-_ARCH_REGISTRY_DEFAULTS: dict[str, tuple[str, str]] = {
-    "ppc64le": (
-        "docker-na-public.artifactory.swg-devops.com",
-        "hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/power/langflowai",
-    ),
-}
-
-_default_registry, _default_org = _ARCH_REGISTRY_DEFAULTS.get(
-    IMAGE_ARCH, ("docker.io", "langflowai")
+#: Base Artifactory URL for ppc64le images.  Set via ARTIFACTORY_IMAGE_URL env var.
+#: On non-ppc64le platforms this is empty and unused.
+_ARTIFACTORY_BASE = "docker-na-public.artifactory.swg-devops.com/hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/power"
+ARTIFACTORY_IMAGE_URL: str = os.getenv(
+    "ARTIFACTORY_IMAGE_URL",
+    _ARTIFACTORY_BASE if IMAGE_ARCH == "ppc64le" else "",
 )
+
+# ---------------------------------------------------------------------------
+# Registry & organisation (derived from ARTIFACTORY_IMAGE_URL on ppc64le)
+# ---------------------------------------------------------------------------
+
+if IMAGE_ARCH == "ppc64le" and ARTIFACTORY_IMAGE_URL:
+    _default_registry = ARTIFACTORY_IMAGE_URL.split("/")[0]
+    _default_org = "/".join(ARTIFACTORY_IMAGE_URL.split("/")[1:]) + "/langflowai"
+else:
+    _default_registry = "docker.io"
+    _default_org = "langflowai"
 
 #: Container registry host.  Override via IMAGE_REGISTRY env var.
 IMAGE_REGISTRY: str = os.getenv("IMAGE_REGISTRY", _default_registry)
@@ -50,23 +57,32 @@ IMAGE_REGISTRY: str = os.getenv("IMAGE_REGISTRY", _default_registry)
 IMAGE_ORG: str = os.getenv("IMAGE_ORG", _default_org)
 
 # ---------------------------------------------------------------------------
-# Third-party image overrides
+# Per-service image overrides for ppc64le
 # ---------------------------------------------------------------------------
+# On ppc64le each service lives at a different path/tag in Artifactory.
+# These are written to .env so docker-compose resolves them correctly.
 
-# On ppc64le the opensearch-dashboards image lives in the same Artifactory
-# namespace under a different path.  The compose file exposes
-# OPENSEARCH_DASHBOARDS_IMAGE so this can be overridden without code changes.
-_DASHBOARDS_DEFAULTS: dict[str, str] = {
-    "ppc64le": (
-        "docker-na-public.artifactory.swg-devops.com/"
-        "hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/power/"
-        "opensearch-dashboards/cnos-dashboards:3.6.0-052726"
-    ),
-}
+_ppc64le_image_overrides: dict[str, str] = {
+    "OPENSEARCH_IMAGE": f"{_ARTIFACTORY_BASE}/opensearch/cnos:3.6.0-052826",
+    "OPENSEARCH_DASHBOARDS_IMAGE": f"{_ARTIFACTORY_BASE}/opensearch-dashboards/cnos-dashboards:3.6.0-052726",
+    "LANGFLOW_IMAGE": f"{_ARTIFACTORY_BASE}/langflowai/openrag-langflow:1.9.0-070826",
+} if IMAGE_ARCH == "ppc64le" else {}
 
+# Expose as module-level constants (env var override always wins)
+OPENSEARCH_IMAGE: str = os.getenv(
+    "OPENSEARCH_IMAGE",
+    _ppc64le_image_overrides.get("OPENSEARCH_IMAGE", ""),
+)
 OPENSEARCH_DASHBOARDS_IMAGE: str = os.getenv(
     "OPENSEARCH_DASHBOARDS_IMAGE",
-    _DASHBOARDS_DEFAULTS.get(IMAGE_ARCH, "docker.io/opensearchproject/opensearch-dashboards:3.0.0"),
+    _ppc64le_image_overrides.get(
+        "OPENSEARCH_DASHBOARDS_IMAGE",
+        "docker.io/opensearchproject/opensearch-dashboards:3.0.0",
+    ),
+)
+LANGFLOW_IMAGE: str = os.getenv(
+    "LANGFLOW_IMAGE",
+    _ppc64le_image_overrides.get("LANGFLOW_IMAGE", ""),
 )
 
 # ---------------------------------------------------------------------------

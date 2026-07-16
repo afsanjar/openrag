@@ -832,25 +832,32 @@ class EnvManager:
         return base_fields + oauth_fields + flow_fields + optional_fields
 
     def ensure_image_config(self) -> None:
-        """Write IMAGE_REGISTRY, IMAGE_ORG and OPENSEARCH_DASHBOARDS_IMAGE to the
-        .env file if they are not already present.
+        """Write image registry config vars to the .env file if not already present.
 
         Values come from ``config.image_config`` which auto-detects the host
-        architecture, so on ppc64le the Artifactory registry is used by default
-        without any manual configuration.
+        architecture, so on ppc64le the Artifactory registry and per-service
+        image overrides are set automatically without any manual configuration.
         """
         try:
             from config.image_config import (
+                ARTIFACTORY_IMAGE_URL,
                 IMAGE_REGISTRY,
                 IMAGE_ORG,
+                OPENSEARCH_IMAGE,
                 OPENSEARCH_DASHBOARDS_IMAGE,
+                LANGFLOW_IMAGE,
             )
 
-            vars_to_ensure = {
-                "IMAGE_REGISTRY": IMAGE_REGISTRY,
-                "IMAGE_ORG": IMAGE_ORG,
-                "OPENSEARCH_DASHBOARDS_IMAGE": OPENSEARCH_DASHBOARDS_IMAGE,
-            }
+            vars_to_ensure: dict[str, str] = {}
+            if ARTIFACTORY_IMAGE_URL:
+                vars_to_ensure["ARTIFACTORY_IMAGE_URL"] = ARTIFACTORY_IMAGE_URL
+            vars_to_ensure["IMAGE_REGISTRY"] = IMAGE_REGISTRY
+            vars_to_ensure["IMAGE_ORG"] = IMAGE_ORG
+            if OPENSEARCH_IMAGE:
+                vars_to_ensure["OPENSEARCH_IMAGE"] = OPENSEARCH_IMAGE
+            vars_to_ensure["OPENSEARCH_DASHBOARDS_IMAGE"] = OPENSEARCH_DASHBOARDS_IMAGE
+            if LANGFLOW_IMAGE:
+                vars_to_ensure["LANGFLOW_IMAGE"] = LANGFLOW_IMAGE
 
             if self.env_file.exists():
                 lines = self.env_file.read_text().splitlines()

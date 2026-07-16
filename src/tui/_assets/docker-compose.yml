@@ -1,9 +1,6 @@
 services:
   opensearch:
-    image: ${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-opensearch:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    image: ${OPENSEARCH_IMAGE:-${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-opensearch:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}}
     container_name: os
     depends_on:
       - openrag-backend
@@ -26,7 +23,7 @@ services:
     restart: unless-stopped
 
   dashboards:
-    image: ${OPENSEARCH_DASHBOARDS_IMAGE:-${IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch-dashboards:3.0.0}
+    image: ${OPENSEARCH_DASHBOARDS_IMAGE:-docker.io/opensearchproject/opensearch-dashboards:3.0.0}
     container_name: osdash
     depends_on:
       - opensearch
@@ -39,9 +36,6 @@ services:
 
   openrag-backend:
     image: ${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-backend:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
     container_name: openrag-backend
     depends_on:
       - langflow
@@ -117,9 +111,6 @@ services:
 
   openrag-frontend:
     image: ${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-frontend:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
     container_name: openrag-frontend
     depends_on:
       - openrag-backend
@@ -129,10 +120,7 @@ services:
       - "${FRONTEND_PORT:-3000}:3000"
 
   langflow:
-    image: ${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-langflow:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}
-    build:
-      context: .
-      dockerfile: Dockerfile.langflow
+    image: ${LANGFLOW_IMAGE:-${IMAGE_REGISTRY:-docker.io}/${IMAGE_ORG:-langflowai}/openrag-langflow:${OPENRAG_IMAGE_TAG:-${OPENRAG_VERSION:-latest}${IMAGE_ARCH:+-${IMAGE_ARCH}}}}
     container_name: langflow
     ports:
       - "${LANGFLOW_PORT:-7860}:7860"
