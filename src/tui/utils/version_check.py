@@ -1,15 +1,14 @@
 """Version checking utilities for OpenRAG TUI."""
 
-from typing import Optional, Tuple
+from config.image_config import IMAGE_NAME_BACKEND, get_org, get_registry
 from utils.logging_config import get_logger
-from config.image_config import IMAGE_NAME_BACKEND, get_registry, get_org
 
 logger = get_logger(__name__)
 
 _DOCKER_HUB_REGISTRY = "docker.io"
 
 
-async def get_latest_docker_version(image_name: str | None = None) -> Optional[str]:
+async def get_latest_docker_version(image_name: str | None = None) -> str | None:
     """
     Get the latest version tag from Docker Hub for OpenRAG containers.
 
@@ -173,7 +172,7 @@ def compare_versions(version1: str, version2: str) -> int:
             return 0
 
 
-async def check_if_latest() -> Tuple[bool, Optional[str], Optional[str]]:
+async def check_if_latest() -> tuple[bool | None, str | None, str | None]:
     """
     Check if the current version is the latest available on Docker Hub.
 

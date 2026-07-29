@@ -3,13 +3,12 @@
 All actions require explicit user consent via Y/n prompts.
 """
 
-import subprocess
-import shutil
-import platform
-import time
-import re
 import os
-from typing import Tuple, Optional
+import platform
+import re
+import shutil
+import subprocess
+import time
 from pathlib import Path
 
 from config.image_config import all_openrag_repos
@@ -39,7 +38,7 @@ def ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
         return False
 
 
-def ask_choice(prompt: str, options: list[str]) -> Optional[int]:
+def ask_choice(prompt: str, options: list[str]) -> int | None:
     """Ask user to choose from numbered options. Returns 1-based index or None."""
     print(prompt)
     for i, opt in enumerate(options, 1):
@@ -67,10 +66,10 @@ def get_platform() -> str:
     elif system == "Linux":
         # Check for WSL
         try:
-            with open("/proc/version", "r") as f:
+            with open("/proc/version") as f:
                 if "microsoft" in f.read().lower():
                     return "WSL"
-        except:
+        except Exception:
             pass
         return "Linux"
     elif system == "Windows":
@@ -173,7 +172,7 @@ def docker_daemon_ready() -> bool:
             ["docker", "info"], capture_output=True, text=True, timeout=10
         )
         return result.returncode == 0
-    except:
+    except Exception:
         return False
 
 
@@ -184,7 +183,7 @@ def podman_ready() -> bool:
             ["podman", "info"], capture_output=True, text=True, timeout=10
         )
         return result.returncode == 0
-    except:
+    except Exception:
         return False
 
 
@@ -197,7 +196,7 @@ def compose_available() -> bool:
         )
         if result.returncode == 0:
             return True
-    except:
+    except Exception:
         pass
     # Try docker-compose (v1)
     return has_cmd("docker-compose")
@@ -302,7 +301,7 @@ def install_docker_linux() -> bool:
         try:
             subprocess.run(["sudo", "usermod", "-aG", "docker", os.environ["USER"]], check=True)
             say("Added user to docker group. You may need to log out and back in.")
-        except:
+        except Exception:
             pass
         return True
     except Exception as e:
@@ -356,7 +355,7 @@ def setup_podman_machine() -> bool:
             capture_output=True, text=True, timeout=10
         )
         machine_exists = bool(result.stdout.strip())
-    except:
+    except Exception:
         machine_exists = False
 
     if not machine_exists:
@@ -397,7 +396,7 @@ def setup_podman_machine() -> bool:
     return podman_ready()
 
 
-def check_podman_machine_memory() -> Tuple[bool, int]:
+def check_podman_machine_memory() -> tuple[bool, int]:
     """Check Podman machine memory. Returns (is_sufficient, current_mb)."""
     if get_platform() != "macOS":
         return True, 0
@@ -411,14 +410,14 @@ def check_podman_machine_memory() -> Tuple[bool, int]:
         if result.returncode == 0 and result.stdout.strip():
             current_mb = int(result.stdout.strip())
             return current_mb >= MIN_PODMAN_MEMORY_MB, current_mb
-    except:
+    except Exception:
         pass
     return True, 0
 
 
 def fix_podman_memory(version: str) -> bool:
     """Recreate Podman machine with more memory."""
-    say(f"Podman machine has insufficient memory.")
+    say("Podman machine has insufficient memory.")
     if not ask_yes_no(f"Recreate machine with {MIN_PODMAN_MEMORY_MB}MB? (WARNING: deletes containers/images)"):
         return False
 
@@ -459,7 +458,7 @@ def fix_podman_memory(version: str) -> bool:
 # Health Checks
 # =============================================================================
 
-def check_runtime_conflict() -> Tuple[bool, Optional[str]]:
+def check_runtime_conflict() -> tuple[bool, str | None]:
     """Check if both Docker and Podman are running independently."""
     if docker_is_podman():
         return False, None  # docker is alias for podman, no conflict
@@ -472,7 +471,7 @@ def check_runtime_conflict() -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-def check_storage_corruption(runtime: str) -> Tuple[bool, Optional[str]]:
+def check_storage_corruption(runtime: str) -> tuple[bool, str | None]:
     """Check for storage/overlay corruption."""
     cmd = ["podman", "info"] if runtime == "podman" else ["docker", "info"]
     try:
@@ -489,7 +488,7 @@ def check_storage_corruption(runtime: str) -> Tuple[bool, Optional[str]]:
         for pattern in corruption_patterns:
             if re.search(pattern, stderr, re.IGNORECASE):
                 return True, stderr
-    except:
+    except Exception:
         pass
     return False, None
 
@@ -546,7 +545,7 @@ def fix_storage_corruption(runtime: str, version: str) -> bool:
         return True
 
 
-def fix_runtime_conflict() -> Optional[str]:
+def fix_runtime_conflict() -> str | None:
     """Handle runtime conflict. Returns chosen runtime or None to exit."""
     say("Both Docker and Podman are running simultaneously.")
     say("This can cause socket conflicts.")
@@ -639,7 +638,7 @@ def run_startup_checks() -> bool:
         match = re.search(r'(\d+\.\d+\.\d+)', result.stdout)
         if match:
             runtime_version = match.group(1)
-    except:
+    except Exception:
         pass
 
     say(f"Using {runtime}" + (f" {runtime_version}" if runtime_version else ""))
